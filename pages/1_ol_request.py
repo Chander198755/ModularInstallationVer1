@@ -1,14 +1,9 @@
 import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
 from datetime import datetime, timedelta
 
-# Initialize Firebase only once
-if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")
-    firebase_admin.initialize_app(cred)
-
-db = firestore.client()
+# 🔥 Firebase Initialization (Cloud + Local both supported)
+from backend.firebase_init import init_firestore
+db = init_firestore()
 
 st.title("Operations Lead - Request Form")
 
@@ -18,8 +13,11 @@ if "submitted" not in st.session_state:
 
 if not st.session_state.submitted:
     email = st.text_input("Enter your email to continue")
+    
     if email:
         st.session_state.email = email  # Save to session state
+
+        # 👇 FIREBASE QUERY – ONLY PROJECTS ASSIGNED TO THIS EMAIL
         docs = db.collection("PID").where("assigned_to", "==", email).stream()
         project_list = []
 
@@ -48,6 +46,7 @@ if not st.session_state.submitted:
                 "Select...", "Fresh Installation", "WIP", "SNAG", "Alignment", "Additional order",
                 "Shifting", "Post sales", "F&D Installation"
             ])
+
             min_date = datetime.now().date() + timedelta(days=1)
             preferred_date = st.date_input("Preferred Date", value=min_date, min_value=min_date)
 
@@ -59,6 +58,7 @@ if not st.session_state.submitted:
                 if all([team_qty != "Select...", pref_time != "Select...", task_type != "Select..."]):
                     fy_code = f"{datetime.now().year % 100}/{(datetime.now().year + 1) % 100}"
                     city_code = selected_data["city"][:3].upper()
+
                     existing_reqs = db.collection("Requests").where("city", "==", selected_data["city"]).stream()
                     req_count = sum(1 for _ in existing_reqs) + 1
                     request_number = f"{city_code}-{req_count:03d}-{fy_code}"
@@ -84,9 +84,8 @@ if not st.session_state.submitted:
                 else:
                     st.warning("⚠️ Please fill all fields before submitting.")
 else:
-    st.success("✅ Request Submitted Successfully!")
+    st.success("Request submitted. Thank you!")
     if st.button("Make Another Request"):
         for key in ["submitted", "email"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()  # New method replacing experimental_rerun
+            st.session_state.pop(key, None)
+        st.rerun()
