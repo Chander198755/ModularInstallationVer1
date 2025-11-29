@@ -1,6 +1,4 @@
-firebase-admin
-google-cloud-firestore
-streamlit
+streamlit==1.40.0
 firebase-admin==6.4.0
 google-cloud-firestore
 google-cloud-storage
