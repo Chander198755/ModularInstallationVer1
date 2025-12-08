@@ -1,39 +1,32 @@
 import streamlit as st
 from backend.firebase_init import init_firestore
 
-st.set_page_config(page_title="Login", layout="centered")
-
 db = init_firestore()
 
 st.title("🔐 Login Access")
 st.write("Enter your credentials")
 
-email = st.text_input("Email")
-password = st.text_input("Password", type="password")
+email_input = st.text_input("Email")
+password_input = st.text_input("Password", type="password")
 
 if st.button("Login"):
-    try:
-        doc_ref = db.collection("Users").document(email)
-        doc = doc_ref.get()
+    email = email_input.strip().lower()
+    password = password_input.strip()
 
-        if doc.exists:
-            user = doc.to_dict()
+    users_ref = db.collection("Users").stream()
+    user_found = False
 
-            # Fix password match
-            stored_pass = str(user.get("password", "")).replace('"', "").strip()
+    for doc in users_ref:
+        user = doc.to_dict()
+        if user.get("email", "").strip().lower() == email and user.get("password", "") == password:
+            st.session_state.logged_in = True
+            st.session_state.user_email = user["email"]
+            st.session_state.user_role = user.get("role", "OL")
+            st.session_state.user_cities = user.get("cities", ["ALL"])
+            user_found = True
+            st.success(f"Welcome back {user.get('name', '')}!")
+            st.switch_page("dashboard.py")
+            break
 
-            if stored_pass == password and user.get("active", False):
-                # Save Login State
-                st.session_state.logged_in = True
-                st.session_state.user_email = user["email"]
-                st.session_state.user_role = user["role"]
-                st.session_state.user_cities = user["cities"]
-                st.success("Login successful! 🚀")
-                st.rerun()
-            else:
-                st.error("Invalid email or password!")
-        else:
-            st.error("User not found!")
-
-    except Exception as e:
-        st.error(f"Error: {e}")
+    if not user_found:
+        st.error("Invalid email or password!")
