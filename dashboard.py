@@ -1,7 +1,9 @@
 import streamlit as st
+from backend.firebase_init import init_firestore
+import hashlib
 
 # -------------------------------
-# Page Config MUST be first line
+# Page Config
 # -------------------------------
 st.set_page_config(
     page_title="Modular Installation Dashboard",
@@ -9,53 +11,134 @@ st.set_page_config(
 )
 
 # -------------------------------
-# Firebase Initialization (Safe Position)
+# Firebase
 # -------------------------------
-from backend.firebase_init import init_firestore
-
-try:
-    db = init_firestore()
-    st.sidebar.success("🔥 Firebase Connected")
-except Exception as e:
-    st.sidebar.error(f"❌ Firebase Error: {e}")
-    st.stop()  # Stop execution if Firebase fails
+db = init_firestore()
 
 # -------------------------------
-# Main Title
+# Session State Defaults
 # -------------------------------
-st.title("🔧 Modular Installation Dashboard")
-st.write("Use the sidebar to navigate between modules.")
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
+
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None
+
+if "user_cities" not in st.session_state:
+    st.session_state.user_cities = []
 
 # -------------------------------
-# Sidebar Navigation
+# Login Function
 # -------------------------------
+def login_user(email, password):
+
+    # SHA-256 Password hash
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+
+    doc = db.collection("Users").document(email).get()
+
+    if doc.exists:
+        data = doc.to_dict()
+        if data.get("password") == hashed and data.get("active", False):
+            st.session_state.logged_in = True
+            st.session_state.user_email = email
+            st.session_state.user_role = data.get("role")
+            st.session_state.user_cities = data.get("cities", [])
+            return True
+    return False
+
+
+# -------------------------------
+# Logout Function
+# -------------------------------
+def logout():
+    for key in ["logged_in", "user_email", "user_role", "user_cities"]:
+        st.session_state[key] = None
+    st.session_state.logged_in = False
+    st.rerun()
+
+
+# -------------------------------
+# LOGIN SCREEN (if NOT logged in)
+# -------------------------------
+if not st.session_state.logged_in:
+
+    st.title("🔐 Login Access")
+    st.write("Enter your credentials")
+
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if login_user(email, password):
+            st.success("Logged in successfully!")
+            st.rerun()
+        else:
+            st.error("Invalid email or password!")
+
+    st.stop()
+
+
+# -------------------------------
+# After Successful Login
+# -------------------------------
+st.sidebar.success(f"Welcome: {st.session_state.user_email}")
+st.sidebar.write(f"Role: **{st.session_state.user_role}**")
+
+st.sidebar.button("🚪 Logout", on_click=logout)
+
+
+# NAVIGATION BASED ON ROLE
 st.sidebar.header("📂 Navigation")
 
-page = st.sidebar.radio(
-    "Select a page:",
-    [
+role = st.session_state.user_role
+
+menu = []
+
+# Role Based Access Rules
+if role in ["SuperAdmin", "Admin"]:
+    menu += [
         "📤 Submit Request (OL)",
         "🛠️ Installation Manager",
         "➕ Add PID",
         "👷 Add Manager",
-        "👥 Team Registration"
+        "👥 Team Registration",
     ]
-)
+
+elif role == "InstallationManager":
+    menu += [
+        "🛠️ Installation Manager",
+    ]
+
+elif role == "OL":
+    menu += [
+        "📤 Submit Request (OL)",
+    ]
+
+else:
+    st.error("🚫 Your role is invalid or access blocked.")
+    st.stop()
+
+# Show allowed menu
+choice = st.sidebar.radio("Select page", menu)
 
 # -------------------------------
-# Page Routing Logic
+# Page Routing
 # -------------------------------
-if page == "📤 Submit Request (OL)":
+if choice == "📤 Submit Request (OL)":
     st.switch_page("pages/1_ol_request.py")
 
-elif page == "🛠️ Installation Manager":
+elif choice == "🛠️ Installation Manager":
     st.switch_page("pages/2_installation_manager.py")
 
-elif page == "➕ Add PID":
+elif choice == "➕ Add PID":
     st.switch_page("pages/3_add_pid.py")
 
-elif page == "👷 Add Manager":
+elif choice == "👷 Add Manager":
     st.switch_page("pages/4_fix_installation_manager.py")
 
-elif page == "👥 Team Registration":
+elif choice == "👥 Team Registration":
     st.switch_page("pages/5_Team_Registration.py")
