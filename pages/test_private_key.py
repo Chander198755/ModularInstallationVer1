@@ -6,15 +6,23 @@ import streamlit as st
 from backend.firebase_init import init_firestore
 import traceback
 
-st.title("🔥 Firestore Connection Test")
+st.title("🔥 Firestore Connection Test (SaaS)")
 
 try:
     st.write("⏳ Connecting to Firebase...")
     db = init_firestore()
     st.success("🎉 Successfully connected to Firestore!")
 
-    st.write("🔍 Fetching sample data...")
-    docs = db.collection("PID").limit(3).stream()
+    company_id = st.session_state.get("company_id", "MODINTL")
+
+    st.write(f"🔍 Fetching sample PID data for company: {company_id}")
+    docs = (
+        db.collection("companies")
+          .document(company_id)
+          .collection("PID")
+          .limit(3)
+          .stream()
+    )
 
     for doc in docs:
         st.write(doc.id, doc.to_dict())

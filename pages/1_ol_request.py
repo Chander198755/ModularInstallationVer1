@@ -9,6 +9,12 @@ db = init_firestore()
 st.title("🏡 Modular Installation Request")
 st.markdown("---")
 
+# 🔑 SaaS: company context (MANDATORY)
+company_id = st.session_state.get("company_id")
+if not company_id:
+    st.error("Company context missing. Please login again.")
+    st.stop()
+
 # === STATE HANDLING ===
 if "form_reset" not in st.session_state:
     st.session_state.form_reset = False
@@ -37,7 +43,13 @@ def aligned_row(label, widget_func):
 with col_main:
     with st.container(border=True):
 
-        pid_docs = db.collection("PID").stream()
+        pid_docs = (
+            db.collection("companies")
+              .document(company_id)
+              .collection("PID")
+              .stream()
+        )
+
         pid_list = []
         for doc in pid_docs:
             d = doc.to_dict()
@@ -136,28 +148,39 @@ if st.session_state.selected_pid_data:
                     fy = f"{now.year % 100}/{(now.year + 1) % 100}"
                     city_code = selected_data["city"][:3].upper()
 
-                    existing = db.collection("Requests").where(
-                        "city", "==", selected_data["city"]).stream()
+                    # 🔑 SaaS-SAFE request counter (per company)
+                    existing = (
+                        db.collection("companies")
+                          .document(company_id)
+                          .collection("Requests")
+                          .where("city", "==", selected_data["city"])
+                          .stream()
+                    )
                     req_count = sum(1 for _ in existing) + 1
                     request_no = f"{city_code}-{req_count:03d}-{fy}"
 
-                    # 🔥 Updated Date Format → 6-Dec-2025
                     formatted_date = st.session_state.preferred_date.strftime("%-d-%b-%Y")
 
-                    db.collection("Requests").add({
-                        "project_id": selected_data["pid"],
-                        "project_name": selected_data["project_name"],
-                        "city": selected_data["city"],
-                        "address": selected_data["address"],
-                        "team_qty": st.session_state.team_qty,
-                        "preferred_time": st.session_state.pref_time,
-                        "task_type": st.session_state.task_type,
-                        "preferred_date": formatted_date,
-                        "job_description": job_description,
-                        "categories": st.session_state.selected_categories,
-                        "request_number": request_no,
-                        "timestamp": now,
-                    })
+                    db.collection("companies") \
+                        .document(company_id) \
+                        .collection("Requests") \
+                        .add({
+                            "company_id": company_id,
+                            "project_id": selected_data["pid"],
+                            "project_name": selected_data["project_name"],
+                            "city": selected_data["city"],
+                            "address": selected_data["address"],
+                            "team_qty": st.session_state.team_qty,
+                            "preferred_time": st.session_state.pref_time,
+                            "task_type": st.session_state.task_type,
+                            "preferred_date": formatted_date,
+                            "job_description": job_description,
+                            "categories": st.session_state.selected_categories,
+                            "request_number": request_no,
+                            "status": "Open",
+                            "created_by": st.session_state.get("user_email"),
+                            "timestamp": now,
+                        })
 
                     st.success(f"🎉 Request Submitted!\n\n### Request Number: `{request_no}`")
                     st.session_state.form_reset = True

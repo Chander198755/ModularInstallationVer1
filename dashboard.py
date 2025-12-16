@@ -1,6 +1,4 @@
 import streamlit as st
-from backend.firebase_init import init_firestore
-import hashlib
 
 # ---------------------------------
 # Page Config
@@ -11,74 +9,74 @@ st.set_page_config(
 )
 
 # ---------------------------------
-# Firebase
+# Login + SaaS Context (MANDATORY)
 # ---------------------------------
-db = init_firestore()
+logged_in = st.session_state.get("logged_in")
+company_id = st.session_state.get("company_id")
+user_email = st.session_state.get("user_email")
+user_role = st.session_state.get("user_role")
 
-# ---------------------------------
-# Login Redirect (Mandatory)
-# ---------------------------------
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
+if not logged_in or not company_id or not user_email:
     st.switch_page("pages/0_login.py")
+    st.stop()
 
 # ---------------------------------
-# Sidebar Header After Login
+# Sidebar Header
 # ---------------------------------
-st.sidebar.success(f"Welcome: {st.session_state.user_email}")
-st.sidebar.write(f"Role: **{st.session_state.user_role}**")
-
+st.sidebar.success(f"Welcome: {user_email}")
+st.sidebar.write(f"Company: **{company_id}**")
+st.sidebar.write(f"Role: **{user_role}**")
 
 # ---------------------------------
-# Logout Button
+# Logout
 # ---------------------------------
 def logout():
-    for key in ["logged_in", "user_email", "user_role", "user_cities"]:
-        st.session_state[key] = None
-    st.session_state.logged_in = False
+    for key in [
+        "logged_in",
+        "company_id",
+        "user_email",
+        "user_role",
+        "user_cities",
+    ]:
+        st.session_state.pop(key, None)
     st.rerun()
 
 st.sidebar.button("🚪 Logout", on_click=logout)
-
 
 # ---------------------------------
 # Role-based Navigation
 # ---------------------------------
 st.sidebar.header("📂 Navigation")
-role = st.session_state.user_role
 menu = []
 
-if role == "SuperAdmin":
+if user_role == "SuperAdmin":
     menu += [
         "📤 Submit Request (OL)",
         "🛠️ Installation Manager",
         "➕ Add PID",
-        "👷 Add Manager",
         "👥 Team Registration",
-        "🔐 User Management",  # NEW
+        "🔐 User Management",
     ]
 
-elif role == "Admin":
+elif user_role == "Admin":
     menu += [
         "📤 Submit Request (OL)",
         "🛠️ Installation Manager",
         "➕ Add PID",
-        "👷 Add Manager",
         "👥 Team Registration",
     ]
 
-elif role == "InstallationManager":
+elif user_role in ["InstallationManager", "IM"]:
     menu += ["🛠️ Installation Manager"]
 
-elif role == "OL":
+elif user_role == "OL":
     menu += ["📤 Submit Request (OL)"]
 
 else:
     st.error("🚫 Access blocked.")
     st.stop()
 
-
 choice = st.sidebar.radio("Select page", menu)
-
 
 # ---------------------------------
 # Page Routing
@@ -92,11 +90,8 @@ elif choice == "🛠️ Installation Manager":
 elif choice == "➕ Add PID":
     st.switch_page("pages/3_add_pid.py")
 
-elif choice == "👷 Add Manager":
-    st.switch_page("pages/4_fix_installation_manager.py")
-
 elif choice == "👥 Team Registration":
     st.switch_page("pages/5_Team_Registration.py")
 
-elif choice == "🔐 User Management":       # NEW 🚀
+elif choice == "🔐 User Management":
     st.switch_page("pages/6_user_management.py")

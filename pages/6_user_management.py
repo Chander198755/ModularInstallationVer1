@@ -3,15 +3,23 @@ import pandas as pd
 from backend.firebase_init import init_firestore
 import hashlib
 
-# Firestore
+# --- Firestore ---
 db = init_firestore()
+
+# ===== SaaS LOGIN CONTEXT =====
+company_id = st.session_state.get("company_id")
+user_role = st.session_state.get("user_role")
+
+if not company_id:
+    st.error("Session expired. Please login again.")
+    st.stop()
 
 # Page Title
 st.title("👥 User Management (Super Admin Only)")
 st.write("Add, view and manage all system users.")
 
 # Access Restriction
-if st.session_state.user_role != "SuperAdmin":
+if user_role != "SuperAdmin":
     st.error("🚫 Access Denied — Only SuperAdmin allowed here!")
     st.stop()
 
@@ -38,14 +46,23 @@ with st.form("add_user_form"):
             st.error("⚠ Name, Email & Password Required!")
         else:
             hashed_pwd = hashlib.sha256(password.encode()).hexdigest()
-            db.collection("Users").document(email).set({
-                "email": email,
-                "name": name,
-                "role": role,
-                "password": hashed_pwd,
-                "cities": cities,
-                "active": True
-            })
+
+            (
+                db.collection("companies")
+                  .document(company_id)
+                  .collection("Users")
+                  .document(email.lower())
+                  .set({
+                      "company_id": company_id,
+                      "email": email.lower(),
+                      "name": name,
+                      "role": role,
+                      "password": hashed_pwd,
+                      "cities": cities,
+                      "active": True,
+                  })
+            )
+
             st.success(f"User **{email}** added successfully!")
             st.rerun()
 
@@ -56,8 +73,13 @@ st.markdown("---")
 # -------------------------------------
 st.subheader("📋 User List")
 
-# Load all users
-user_docs = db.collection("Users").stream()
+user_docs = (
+    db.collection("companies")
+      .document(company_id)
+      .collection("Users")
+      .stream()
+)
+
 all_users = [u.to_dict() for u in user_docs]
 
 if not all_users:
@@ -90,7 +112,14 @@ user_list = df["email"].tolist()
 selected_user = st.selectbox("Select User to Edit", user_list)
 
 if selected_user:
-    data = db.collection("Users").document(selected_user).get().to_dict()
+    data = (
+        db.collection("companies")
+          .document(company_id)
+          .collection("Users")
+          .document(selected_user)
+          .get()
+          .to_dict()
+    )
 
     st.write(f"📧 Email: **{data.get('email')}**")
     st.write(f"👤 Name: **{data.get('name')}**")
@@ -110,22 +139,40 @@ if selected_user:
     new_status = st.checkbox("Active?", value=data.get("active", True))
 
     if st.button("💾 Save Changes"):
-        db.collection("Users").document(selected_user).update({
-            "role": new_role,
-            "cities": new_cities,
-            "active": new_status
-        })
+        (
+            db.collection("companies")
+              .document(company_id)
+              .collection("Users")
+              .document(selected_user)
+              .update({
+                  "role": new_role,
+                  "cities": new_cities,
+                  "active": new_status
+              })
+        )
         st.success("✔ Changes Updated!")
         st.rerun()
 
-    # Block / Unblock User
+    # Block / Unblock
     if new_status:
         if st.button("🚫 Block User"):
-            db.collection("Users").document(selected_user).update({"active": False})
+            (
+                db.collection("companies")
+                  .document(company_id)
+                  .collection("Users")
+                  .document(selected_user)
+                  .update({"active": False})
+            )
             st.warning("User Blocked!")
             st.rerun()
     else:
         if st.button("🔓 Unblock User"):
-            db.collection("Users").document(selected_user).update({"active": True})
+            (
+                db.collection("companies")
+                  .document(company_id)
+                  .collection("Users")
+                  .document(selected_user)
+                  .update({"active": True})
+            )
             st.success("User Unblocked!")
             st.rerun()
